@@ -16,7 +16,7 @@ services:
       # DOCKER_API_VERSION: 1.49
       # WATCHTOWER_RUN_ONCE: true
     restart: unless-stopped
-  
+
   telemt:
     image: ghcr.io/telemt/telemt:latest
     build: .
@@ -64,3 +64,13 @@ services:
       - '--path.sysfs=/host/sys'
       - '--path.rootfs=/rootfs'
     restart: unless-stopped
+    
+  prometheus-amnezia-exporter:
+    image: fixfever/prometheus-amnezia-exporter:latest
+    container_name: prometheus-amnezia-exporter
+    ports:
+      - 9586:9586
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    
