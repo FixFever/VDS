@@ -1,10 +1,25 @@
 services:
     
+  caddy-gen:
+    container_name: caddy-gen
+    image: wemakeservices/caddy-gen:master
+    ports:
+      - 443:443
+      - 80:80
+    environment:
+      CADDY_SNIPPET: /etc/caddy/caddy.snippet
+    volumes:
+      - /var/run/docker.sock:/tmp/docker.sock:ro # needs socket to read events
+      - ./caddy/data:/data/caddy
+      - ./caddy/etc:/etc/caddy
+      - ./caddy/config:/config/caddy
+    networks:
+      - telemt-network
+    restart: unless-stopped
+      
   watchtower:
     image: containrrr/watchtower:latest
     container_name: watchtower
-    ports:
-      - 8090:8080  
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock
       - /etc/localtime:/etc/localtime:ro
@@ -13,8 +28,6 @@ services:
       WATCHTOWER_NOTIFICATIONS: shoutrrr
       WATCHTOWER_DISABLE_CONTAINERS: /amnezia-awg
       WATCHTOWER_NOTIFICATION_URL: telegram://${TELEGRAM_BOT_TOKEN}@telegram?chats=${CHAT_ID}
-      # DOCKER_API_VERSION: 1.49
-      # WATCHTOWER_RUN_ONCE: true
     restart: unless-stopped
 
   telemt:
@@ -25,7 +38,6 @@ services:
       - 4455:4455 # proxy
       - 9091:9091 # api
       - 9090:9090 # metrics 
-    # Allow caching 'proxy-secret' in read-only container
     working_dir: /run/telemt
     volumes:
       - ./telemt:/run/telemt
@@ -34,25 +46,37 @@ services:
     cap_drop:
       - ALL
     cap_add:
-      - NET_BIND_SERVICE   # allow binding to port
+      - NET_BIND_SERVICE
     security_opt:
       - no-new-privileges:true
     ulimits:
       nofile:
         soft: 65536
         hard: 65536
+    networks:
+      - telemt-network
     restart: unless-stopped
     
   telemt-panel:
     image: ghcr.io/amirotin/telemt_panel:latest
     container_name: telemt-panel
-    network_mode: host
+    ports:
+      - 8080:8080 
     volumes:
       - ./telemt-panel:/etc/telemt-panel
       - ./telemt:/run/telemt:rw
       - /var/run/docker.sock:/var/run/docker.sock
+    depends_on:
+      - caddy-gen
+      - telemt
+    networks:
+      - telemt-network
     restart: unless-stopped
-
+    labels:
+      virtual.host: telemt.${DOMAIN}
+      virtual.port: 8080
+      virtual.tls-email: ${TLS_EMAIL}
+      
   node-exporter:
     image: prom/node-exporter:latest
     container_name: node-exporter
@@ -76,3 +100,7 @@ services:
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
     restart: unless-stopped  
+    
+networks:
+  telemt-network:
+    driver: bridge
